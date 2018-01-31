@@ -1,0 +1,3 @@
+To use, simply "make" in directory. Then, type "./serialized_test input.pnm out.pnm" 
+to create your output pnm file. You may also "cat program_log" to see additional 
+timing information.
