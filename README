@@ -13,3 +13,19 @@ makes the code exceptionally fast. I as happy to see that in artificial tests
 handling images of 10,000 x 10,000, my serialized code would take 5 or more seconds
 to complete, while the parallelized code would be finished in under one second.
 Cool!
+
+Update 02/14/18:
+
+I used a simple inversion filter which negates the color values of each pixel (additional details above).
+Essentially, it subtracts the value of each RGB value of the pixel from 255, to calculate the inverse.
+
+Timing information:
+Time to complete serialized (1786 x 1344 pixel image):
+0.134691 seconds
+
+Time to complete parallelized (1786 x 1344 pixel image):
+0.027544 seconds
+
+Clearly the parallelized version executes faster, and if the computations within
+the for loop were more complex and involved several instructions (such as a blur
+filter) I would expect the relative speed increase to be different.
