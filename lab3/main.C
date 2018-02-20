@@ -1,16 +1,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
-#include <opm.h>
+#include <omp.h>
 #define UNUSED __attribute__((unused)) 
 
+#define DIMENSIONS 100 
 #define NUM_ITERATIONS 10000
+#define NUM_THREADS 16
+ 
 #define HEAT_FACTOR 100.0
 #define COLD_FACTOR -100.0
 
-int main(UNUSED int argc, UNUSED char** argv){
+int main(){
 
-	int n = 1000; //rows, cols of nxn input
+	//Turn of dynamic thread usage for experimentation purposes
+	omp_set_dynamic(0);
+	omp_set_num_threads(NUM_THREADS);
+
+	int n = DIMENSIONS; //rows, cols of nxn input
 	int n2 = n + 2;
 
 	//Create new array on heap
@@ -28,42 +35,36 @@ int main(UNUSED int argc, UNUSED char** argv){
 	double heatFactor = HEAT_FACTOR;
 	double coldFactor = COLD_FACTOR;
 
-	//Initialize all array values to be cold
-	for(int i = 0; i < n+2; i++)
-		for(int j = 0; j < n+2; j++)
-			in[i][j] = coldFactor;
-
-	//Initialize all border values to be "hot"
+	int j = 0;
+	//Initialize all border values to be "hot", inner values to be cold
 	for(int i = 0; i < n+2; i++){
-		in[0  ][i] = out[0][i] = heatFactor; //top border
-		in[i  ][0] = out[i][0] = heatFactor;//left border
-		in[i][n+1] = out[i][n+1] = heatFactor;//right border
-		in[n+1][i] = out[n+1][i] = heatFactor;//bottom border
+		in[0  ][i] = out[0][i  ] = heatFactor; //top border
+		in[i  ][0] = out[i][0  ] = heatFactor; //left border
+		in[i][n+1] = out[i][n+1] = heatFactor; //right border
+		in[n+1][i] = out[n+1][i] = heatFactor; //bottom border
+		in[i][j] = coldFactor;
+		j++;
 	}		
 
+	
+	//Used to update input/output
+	double** swap = NULL;
+	//Main loop (cannot be parallelized)
 	for(int k = 0; k < NUM_ITERATIONS; k++)
 	{
-		#pragma omp parallel num_threads(2)
 		for(int i = 1; i < n+1; i++)
 		{
-			for(int j = 1; j < n+1; j++)
+			#pragma omp parallel for schedule(static)
+			for(int j = 1; j < n+1; j++)	
 			{
 				out[i][j] = in[i][j] + c * (t / s*s) *
 				// Incorporate adjacent elements 
 				(in[i+1][j] + in[i-1][j] - 4 * in[i][j] + in[i][j+1] + in[i][j-1]); 	
 			}
 		}
-		double** swap;
 		swap = out;
 		out = in;
 		in = swap;
-	}
-
-	for(int i = 0; i < n2; i++){
-		for(int j = 0; j < n2; j++){
-		//	std::cout << out[i][j] << " ";
-		}	
-		//std::cout << std::endl;
 	}
 
 	//Clean up memory	
