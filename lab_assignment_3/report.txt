@@ -1,0 +1,53 @@
+
+Author: Jordan M. Lewis
+02/20/2018
+
+Lab Assignment 3: 2D Heat Equation with OpenMP
+
+==============================================
+Observations and Results:
+==============================================
+
+When I initially began testing my project, I was
+surprised at how long it would take to run 10,000
+iterations of the 100x100 array without OpenMP.
+I was excited to see how I would be able to improve
+the performance of the program. 
+
+I learned first-hand through this project that there are
+times where you can't just put as much data as you want
+on the stack. So, both my input and output arrays are on the heap.
+With this and OpenMP, I also noticed that Valgrind is unable to accurately 
+notify the user of memory leaks.
+
+I started by parallelizing both the outer and inner loop.
+Though I saw huge performance increase I knew that the 
+overhead of creating and deleting all of the threads
+was going to be detrimental on the performance.
+
+I then parallelized the inner loop, knowing that it
+was probably going to be pretty inefficient. Though
+it maintained better performance, the time required 
+to execute almost doubled each time I doubled the threadcount.
+
+Then, I parallelized the outer loop hoping that
+I could gain some performance by keeping spawned threads
+around longer to do more work before killing them. 
+The results below show that this was the most effective method.
+
+
+Outer loop parallelized, 10,000 iterations:
+
+	p=1	p=2	p=4	p=8	p=16
+100	0.385s  0.489s  1.080s  2.016s  2.889s
+1000    30.528s 14.663s 7.429s  7.353s  6.910s
+10000   1h1m    32m25s  18m20s  15m40s  17m30s
+10000   X       X       X       X       X
+
+
+Though this data is not averaged over multiple attempts,
+I claim that for the purposes of this algorithm 4 to 8 
+threads is most likely optimal.
+
+
+	
