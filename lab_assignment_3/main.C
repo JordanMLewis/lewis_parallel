@@ -4,7 +4,7 @@
 #include <omp.h>
 #define UNUSED __attribute__((unused)) 
 
-#define DIMENSIONS 100 
+#define DIMENSIONS 1000
 #define NUM_ITERATIONS 10000
 #define NUM_THREADS 4
  
@@ -20,37 +20,44 @@ int main(){
 	int n = DIMENSIONS; //rows, cols of nxn input
 	int n2 = n + 2;
 
-	//Create new array on heap
+	//Create new double** on heap
 	double** in = (double**) malloc(sizeof(double*)*n2);
 	double** out = (double**) malloc(sizeof(double*)*n2);
 	if(in == NULL or out == NULL){ exit(1);}
-	for(int i = 0; i < n2; i++){
-		in[i] = (double*) malloc(sizeof(double)*n2);
+	
+	//Malloc double* for each index
+	for(int i = 0; i < n2; i++){ 
+		in[i] = (double*) malloc(sizeof(double)*n2); 
 		out[i] = (double*) malloc(sizeof(double)*n2);
 	}
 	
-	double c = 0.1; 	//constants
-	double s = (1/(n+1));     //constants
-	double t = ((s*s)/(4*c)); //constants
-	double constantFactor = c * (t / s*s); //Minimize computation in the loop
+	//Constants, minimize computation
+	double c = (double) 0.1; 	
+	double s = (double) (1.0/(n+1.0));
+	double t = (double) ((s*s)/(4.0*c));
+	double constantFactor = (double) c * (t / s*s);
 
 	//Initialize values in input array
 	double heatFactor = HEAT_FACTOR;
 	double coldFactor = COLD_FACTOR;
 
-	int j = 0;
+	//Initialize all values of output
+	for(int i = 0; i < n2; i++){
+		for(int j = 0; j < n2; j++){
+			out[i][j] = coldFactor;	
+		}
+	}
+
+
 	int n1 = n+1;
 	//Initialize all border values to be "hot", inner values to be cold
 	for(int i = 0; i < n+2; i++){
-		in[0  ][i] = out[0][i  ] = heatFactor; //top border
-		in[i  ][0] = out[i][0  ] = heatFactor; //left border
-		in[i][n1] = out[i][n1] = heatFactor; //right border
-		in[n1][i] = out[n1][i] = heatFactor; //bottom border
-		in[i][j] = coldFactor;
-		j++;
+		in[0 ][i ] = out[0][i ] = heatFactor; //top border
+		in[i ][0 ] = out[i][0 ] = heatFactor; //left border
+		in[i ][n1] = out[i][n1] = heatFactor; //right border
+		in[n1][i ] = out[n1][i] = heatFactor; //bottom border
 	}		
 
-	
 	//Used to update input/output
 	double** swap = NULL;
 
@@ -61,7 +68,7 @@ int main(){
 			for(int j = 1; j < n+1; j++){
 				out[i][j] = in[i][j] + constantFactor *
 				// Incorporate adjacent elements 
-				(in[i+1][j] + in[i-1][j] - 4 * in[i][j] + in[i][j+1] + in[i][j-1]); 	
+				(in[i+1][j] + in[i-1][j] - 4.0 * in[i][j] + in[i][j+1] + in[i][j-1]); 	
 			}
 		}
 		swap = out;
