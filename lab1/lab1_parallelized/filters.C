@@ -22,8 +22,7 @@ const char* CheckSum::getSourceName() { return "(CheckSum)";  }
 
 Color::Color(int w, int h, unsigned char r, unsigned char g, unsigned char b){	
 	//Check input parameters for validity
-	//if(w > 0 && h > 0 && (255 >= r && r  >= 0) && (255 >= g && g >= 0) && (255 >= b && b >= 0)) {
-	if(w > 0 && h > 0){ // && (255 >= r && r  >= 0) && (255 >= g && g >= 0) && (255 >= b && b >= 0)) {
+	if(w > 0 && h > 0){
 	       	this->colorWidth = w;
 		this->colorHeight = h;
 		this->rVal = r;

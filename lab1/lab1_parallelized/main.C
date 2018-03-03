@@ -12,7 +12,6 @@ int main(UNUSED int argc, UNUSED char *argv[])
     
     //Filters go here
     Mirror mr;
-    //Color blue(10000, 10000, 0, 0, 255);
 
     mr.SetInput(reader.GetOutput());
 

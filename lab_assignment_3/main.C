@@ -48,7 +48,6 @@ int main(){
 		}
 	}
 
-
 	int n1 = n+1;
 	//Initialize all border values to be "hot", inner values to be cold
 	for(int i = 0; i < n+2; i++){

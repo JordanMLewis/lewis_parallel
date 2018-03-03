@@ -1,7 +1,7 @@
 CXX=g++ -m64
 CXXFLAGS= -Iobjs/ -O3 -Wall -Wextra -pedantic -Wfatal-errors -std=c++11
 ISPC=ispc
-ISPCFLAGS= -O2 --arch=x86-64 --target=sse2
+ISPCFLAGS= -O3 --arch=x86-64 --target=sse2
 
 SRC=main.C image.C sink.C source.C PNMreader.C PNMwriter.C filters.C logging.C
 SRC_ISPC=parallelized.ispc
