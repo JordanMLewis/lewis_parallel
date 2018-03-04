@@ -1,205 +1,181 @@
 #include <stdio.h>
+#include <cmath>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
-#include <iostream>
-#include <omp.h>
-#define UNUSED __attribute__((unused)) 
+#include <mpi.h>
 
-#define DIMENSIONS 100
-#define NUM_ITERATIONS 10
+#define NITERS 10000
+#define N 10000
+#define CONVERGENCE_THRESHOLD 0.0001
 
-#define NUM_PARTITIONS 4
-#define NUM_THREADS 4
- 
-#define HEAT_FACTOR 100.0
-#define COLD_FACTOR -100.0
+using namespace std;
 
-typedef struct partition {
-	int size;
-	double** data;
-	double* ghost_cells_north;
-	double* ghost_cells_south;
-} Partition;
+int main(int argc, char** argv){
 
-int main(){
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	// Initialize number of processes and process ID
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	int numProc;
+	int myID;
+	MPI_Init(&argc, &argv);
+	MPI_Comm_size(MPI_COMM_WORLD, &numProc);
+	MPI_Comm_rank(MPI_COMM_WORLD, &myID);
 
-	//Turn of dynamic thread usage for experimentation purposes
-	omp_set_dynamic(0);
-	omp_set_num_threads(NUM_THREADS);
-
-	int n = DIMENSIONS; //rows, cols of nxn input
-	int n2 = n + 2;
-	int partition_size = (n*n)/NUM_PARTITIONS;
-	int rows_per_partition = (int) round(((double)n*n/(double)NUM_PARTITIONS)); 
-	int total_rows = n;
-
-	printf("%d\n", rows_per_partition);
-	//exit(0);
-
-	//Create new double** on heap
-	double** in = (double**) malloc(sizeof(double*)*n2);
-	double** out = (double**) malloc(sizeof(double*)*n2);
-	if(in == NULL or out == NULL){ exit(1);}
-	
-	//Malloc double* for each index
-	for(int i = 0; i < n2; i++){ 
-		in[i] = (double*) malloc(sizeof(double)*n2); 
-		out[i] = (double*) malloc(sizeof(double)*n2);
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	// Calculate Partition size and get neighbors
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    	int partition_size = (N)/(numProc);
+	int prevProc = myID - 1;
+	int nextProc = myID + 1;
+	//Make sure we don't go out of bounds
+	if(prevProc < 0){
+		prevProc = MPI_PROC_NULL;
+	}
+	if(nextProc >= numProc){
+		nextProc = MPI_PROC_NULL;
 	}
 
-	//Constants, minimize computation
-	double c = (double) 0.1; 	
-	double s = (double) (1.0/(n+1.0));
-	double t = (double) ((s*s)/(4.0*c));
-	double constantFactor = (double) c * (t / s*s);
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	//Create new arrays on the heap
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    	double** input_temp = new double*[partition_size+2];
+ 	double** output_temp = new double*[partition_size+2];
+    				
+    	for(int i = 0; i < partition_size+2; i++)
+    	{
+    		input_temp[i] = new double[N+2];
+    		output_temp[i] = new double[N+2];
+    	}
 
-	//Initialize values in input array
-	double heatFactor = HEAT_FACTOR;
-	double coldFactor = COLD_FACTOR;
-
-	//Initialize all values of output
-	for(int i = 0; i < n2; i++){
-		for(int j = 0; j < n2; j++){
-			out[i][j] = coldFactor;	
-			in[i][j] = coldFactor;	
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	//Create new arrays on the heap
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	for(int i = 0; i < partition_size+2; i++)
+    	{
+    		for(int j = 0; j <N+2; j++)
+    		{
+			input_temp[i][j] = -100.0;
+			output_temp[i][j] = -100.0;
 		}
-	}
-
-	int n1 = n+1;
-	//Initialize all border values to be "hot", inner values to be cold
-	for(int i = 0; i < n+2; i++){
-		in[0 ][i ] = out[0][i ] = heatFactor; //top border
-		in[i ][0 ] = out[i][0 ] = heatFactor; //left border
-		in[i ][n1] = out[i][n1] = heatFactor; //right border
-		in[n1][i ] = out[n1][i] = heatFactor; //bottom border
 	}
 	
-	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-	//Create partition arrays
-	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-	/*
- 	* Create a 3D array where layer one is an array of partition pointers,
- 	* and each partition pointer points to a 2D array of data
- 	*/
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	//If we're rank 0, we want our top cells to be 100
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	if(myID == 0){
+		for(int i = 0; i < N+2; i++)
+		{
+			input_temp[0][i] = 100.0;
+			output_temp[0][i] = 100.0;
+		}
 
-	//Partition arrayn
-	Partition* parts = (Partition*) malloc(sizeof(Partition)*NUM_PARTITIONS);
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	//If we're rank n, we want our bottom cells to be 100
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	} else if(myID == (numProc - 1)) {
+		for(int i = 0; i < N+2; i++)
+		{
+			input_temp[partition_size+1][i] = 100.0;
+			output_temp[partition_size+1][i] = 100.0;	
+		}
+	}
 	
-	//set up arrays
-	for(int i = 0; i < NUM_PARTITIONS; i++){
-		parts[i].data              = (double**) malloc(sizeof(double*)*rows_per_partition);
-		for(int j = 0; j < rows_per_partition; j++){
-			parts[i].data[j] = (double*) malloc(sizeof(double)*n);
-		}
-
-		parts[i].ghost_cells_south = (double*) malloc(sizeof(double)*n);
-		parts[i].ghost_cells_north = (double*) malloc(sizeof(double)*n);
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	//All other ranks between 1 and n, only sides are 100
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	for(int i = 0; i < partition_size+2; i++)
+	{
+		input_temp[i][0] = 100.0;
+		input_temp[i][N+1] = 100.0;
+		output_temp[i][0] = 100.0;
+		output_temp[i][N+1] = 100.0;
 	}
-
-	int current_row = 1;
-	int copied_rows = 0;
-
-	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-	//Copy row data for each partition
-	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-	for(int i = 0; i < NUM_PARTITIONS; i++){
-		copied_rows = 0;
-
-		//Continue to copy rows until we fill our partition
-		while(copied_rows < rows_per_partition && current_row+1 < total_rows){
-			//Copy data from cells in row above
-			memcpy(&(parts[i].ghost_cells_north), &(in[current_row-1][1]), sizeof(double)*n); 
-			//Copy data from cells in current row
-			memcpy(&(parts[i].data), &(in[current_row][1]), sizeof(double)*n); 
-			//Copy data from cells in row below
-			memcpy(&(parts[i].ghost_cells_south), &(in[current_row+1][1]), sizeof(double)*n); 
-			//Increment copied rows	
-			copied_rows++;
-		}
-
-		current_row+=copied_rows;
-	}
-	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-
-	/*
-	//Partition*** should be num_partition double**'s
-	double*** partitions = (double***) malloc(sizeof(double**));
-	for(int i = 0; i < NUM_PARTITIONS; i++){
-
-		//partition** should be num_partitions double*'s 
-		partitions[i] = (double**) malloc(sizeof(double*)*NUM_PARTITIONS);
-		
-		//Malloc (n*n)/partitions space for each partition (partition size)
-		for(int j = 0; j < NUM_PARTITIONS; j++){
-			partitions[i][j] = (double*) malloc(sizeof(double)*partition_size);
-		
-			//Memcpy the input data to each partition
-			memcpy(partitions[i][j], in[i+1], sizeof(double)*partition_size);		
-		}
-
-		
- 		* [X  ], [+1], [ ], [ ], [ ], [ ],
- 		* [0+1], [+1], [ ], [ ], [ ], [ ],
- 		* [1+1], [+1], [ ], [ ], [ ], [ ],
- 		* [2+1], [+1], [ ], [ ], [ ], [ ],
- 		* [3+1], [+1], [ ], [ ], [ ], [ ],
- 		* [   ], [+1], [ ], [ ], [ ], [ ],
- 		
-	}
-	*/			
-	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-	//create ghost cell barriers
-	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-
+    	
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	//Initialize constants
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	double c = 0.1;
+	double s = (double) 1.0/(N+1.0);
+	double t = (double) (s*s)/(4.0*c);
+	double constFactor = (double) (c * (t / s*s));
 	
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	//Main loop for simulations
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	MPI_Request request1, request2;
+	MPI_Status stat1, stat2;	
+	int converged = 1;
+	int global_convergence = 0;
+	int done = 0;
 
-
-	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-
-	/*
-	for(int i = 0; i < 4; i++){
-		for(int j = 0; j < 4; j++){
-			std::cout << partitions[i][j] << " ";
-		}
-		std::cout << std::endl;
-	}
-	*/
-
-	//Used to update input/output
-	double** swap = NULL;
-
-	//Main loop (cannot be parallelized)
-	for(int k = 0; k < NUM_ITERATIONS; k++){
-
-		//#pragma omp parallel for schedule(static)
-		for(int i = 1; i <= n; i++){
-			for(int j = 1; j <= n; j++){
-				out[i][j] = in[i][j] + constantFactor *
-				// Incorporate adjacent elements 
-				(in[i+1][j] + in[i-1][j] - 4.0 * in[i][j] + in[i][j+1] + in[i][j-1]); 	
+	double** temp = NULL;
+	for(int iter = 0; iter < NITERS; iter++)
+	{
+		for(int i = 1; i < partition_size+1; i++)
+		{
+			for(int j = 1; j < N+1; j++)
+			{
+				output_temp[i][j] = 
+				input_temp[i][j] + constFactor * (input_temp[i+1][j]+input_temp[i-1][j]
+				 - 4*input_temp[i][j] + input_temp[i][j+1] +input_temp[i][j-1]);
 			}
 		}
-		swap = out;
-		out = in;
-		in = swap;
-	}
 
+		//Send top row to previous partition
+		MPI_Isend(output_temp[1], N+3, MPI_DOUBLE, prevProc, 1, MPI_COMM_WORLD, &request1);
+		//Send bottom row to next partition
+		MPI_Isend(output_temp[partition_size], N+3, MPI_DOUBLE, nextProc, 1, MPI_COMM_WORLD, &request2);
+		//Blocking receieve previous partition for top ghost cells
+		MPI_Recv(input_temp[0], N+3, MPI_DOUBLE, prevProc, 1, MPI_COMM_WORLD, &stat1);
+		//Blocking recieve next partition for bottom ghost cells
+		MPI_Recv(input_temp[partition_size+1], N+3, MPI_DOUBLE, nextProc, 1, MPI_COMM_WORLD, &stat2);
 		
-	//Clean up memory	
-	/*
-	for(int i = 0; i < NUM_PARTITIONS; i++){
-		for(int j = 0; j < NUM_PARTITIONS; j++){
+		//Test for convergence. If partition has not converged, continue.	
+		converged = 1;
+		for(int k = 0; k < partition_size+2; k++){
+			for(int l = 0; l < N+2; l++){
+				//If the difference was greater than the
+				if(abs(input_temp[k][l] - output_temp[k][l]) > CONVERGENCE_THRESHOLD){
+					converged = 0;	
+				}
+			}
+		}
 
+		MPI_Reduce(&converged, &global_convergence, 1, MPI_INT, MPI_MIN, 0, MPI_COMM_WORLD);
+		if(global_convergence != 0){
+			done = 1;
 		}	
-		free(partitions[i]);
+
+		MPI_Bcast(&done, 1, MPI_INT, 0, MPI_COMM_WORLD);	
+
+		if(done){
+			break;
+		}
+
+		//swap input and output	
+		temp = input_temp;
+		input_temp = output_temp;
+		output_temp = temp;
 	}
-	free(partitions);
+
+	/*
+	for(int k = 0; k < partition_size+2; k++){
+		for(int l = 0; l < partition_size+2; l++){
+			cout << input_temp[k][l] << " ";
+		}
+		cout << endl;
+	}
 	*/
-	for(int i = 0; i < n2; i++){free(in[i]); free(out[i]);}
-	free(in); free(out);
-	return 0;
-}
+
+	MPI_Finalize();
+    				
+    	for(int i = 0; i < partition_size+2; i++)
+    	{
+    		delete(input_temp[i]);
+    		delete(output_temp[i]);
+    	}
+	delete(input_temp);
+	delete(output_temp);
+
+	return 0;	
+}	

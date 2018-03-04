@@ -1,10 +1,12 @@
 #include <stdio.h>
+#include <cmath>
 #include <stdlib.h>
 #include <string.h>
 #include <mpi.h>
 
-#define NITERS 10
-#define N 18
+#define NITERS 10000
+#define N 10000
+#define CONVERGENCE_THRESHOLD 0.0001
 
 using namespace std;
 
@@ -95,13 +97,16 @@ int main(int argc, char** argv){
 	double c = 0.1;
 	double s = (double) 1.0/(N+1.0);
 	double t = (double) (s*s)/(4.0*c);
-	double constFactor = (double) c * (t / s*s);
+	double constFactor = (double) (c * (t / s*s));
 	
 	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 	//Main loop for simulations
 	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 	MPI_Request request1, request2;
 	MPI_Status stat1, stat2;	
+	int converged = 1;
+	int global_convergence = 0;
+	int done = 0;
 
 	double** temp = NULL;
 	for(int iter = 0; iter < NITERS; iter++)
@@ -115,33 +120,62 @@ int main(int argc, char** argv){
 				 - 4*input_temp[i][j] + input_temp[i][j+1] +input_temp[i][j-1]);
 			}
 		}
-	
+
 		//Send top row to previous partition
 		MPI_Isend(output_temp[1], N+3, MPI_DOUBLE, prevProc, 1, MPI_COMM_WORLD, &request1);
 		//Send bottom row to next partition
 		MPI_Isend(output_temp[partition_size], N+3, MPI_DOUBLE, nextProc, 1, MPI_COMM_WORLD, &request2);
-
 		//Blocking receieve previous partition for top ghost cells
 		MPI_Recv(input_temp[0], N+3, MPI_DOUBLE, prevProc, 1, MPI_COMM_WORLD, &stat1);
 		//Blocking recieve next partition for bottom ghost cells
 		MPI_Recv(input_temp[partition_size+1], N+3, MPI_DOUBLE, nextProc, 1, MPI_COMM_WORLD, &stat2);
-	
+		
+		//Test for convergence. If partition has not converged, continue.	
+		converged = 1;
+		for(int k = 0; k < partition_size+2; k++){
+			for(int l = 0; l < N+2; l++){
+				//If the difference was greater than the
+				if(abs(input_temp[k][l] - output_temp[k][l]) > CONVERGENCE_THRESHOLD){
+					converged = 0;	
+				}
+			}
+		}
+
+		MPI_Reduce(&converged, &global_convergence, 1, MPI_INT, MPI_MIN, 0, MPI_COMM_WORLD);
+		if(global_convergence != 0){
+			done = 1;
+		}	
+
+		MPI_Bcast(&done, 1, MPI_INT, 0, MPI_COMM_WORLD);	
+
+		if(done){
+			break;
+		}
+
+		//swap input and output	
 		temp = input_temp;
 		input_temp = output_temp;
 		output_temp = temp;
 	}
 
 	/*
-	fprintf(stderr, "My rank: %d\n", myID);
-	for(int i = 0; i < partition_size+2; i++){
-		for(int j = 0; j < N+2; j++){
-			cout << output_temp[i][j] << " ";	
+	for(int k = 0; k < partition_size+2; k++){
+		for(int l = 0; l < partition_size+2; l++){
+			cout << input_temp[k][l] << " ";
 		}
 		cout << endl;
 	}
-		cout << endl;
 	*/
 
 	MPI_Finalize();
+    				
+    	for(int i = 0; i < partition_size+2; i++)
+    	{
+    		delete(input_temp[i]);
+    		delete(output_temp[i]);
+    	}
+	delete(input_temp);
+	delete(output_temp);
+
 	return 0;	
 }	
