@@ -1,0 +1,21 @@
+Author: Jordan M. Lewis
+Date: 03/03/18
+Course: CIS 431
+
+The timing data is tricky to understand and differences in timing may due to several factors.
+Since we added the convergence check to the code to stop executing after a certain threshold,
+I would expect there to be less variation in execution times as we see below.
+
+It is interesting to me that the 1000 dimension test was much faster than the 100 dimension test.
+Perhaps it is because values will converge quicker. The trend does not continue with 5000 cells
+however, as the time needed to allocate space and check for convergence outweighs other speedups.
+
+with p=4, I assume that because the decomposed parts are a bit larger, it takes more time than when
+p=9. 
+
+Timing data measured using "time" program.
+
+	p=1	p=4	p=9
+n=100	1.021s	2.324s	1.086s
+n=1000	0.530s	0.555s	0.644s
+n=5000	2.859s	1.232s	1.057s

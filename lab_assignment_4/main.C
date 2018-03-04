@@ -4,9 +4,9 @@
 #include <string.h>
 #include <mpi.h>
 
-#define NITERS 10000
-#define N 10000
-#define CONVERGENCE_THRESHOLD 0.0001
+#define NITERS 1000
+#define N 5000
+#define CONVERGENCE_THRESHOLD 0.001
 
 using namespace std;
 
@@ -125,6 +125,7 @@ int main(int argc, char** argv){
 		MPI_Isend(output_temp[1], N+3, MPI_DOUBLE, prevProc, 1, MPI_COMM_WORLD, &request1);
 		//Send bottom row to next partition
 		MPI_Isend(output_temp[partition_size], N+3, MPI_DOUBLE, nextProc, 1, MPI_COMM_WORLD, &request2);
+		
 		//Blocking receieve previous partition for top ghost cells
 		MPI_Recv(input_temp[0], N+3, MPI_DOUBLE, prevProc, 1, MPI_COMM_WORLD, &stat1);
 		//Blocking recieve next partition for bottom ghost cells
